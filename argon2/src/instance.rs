@@ -2,8 +2,8 @@
 
 use crate::{Algorithm, Argon2, Block, Error, Memory, Params, Result, Version, SYNC_POINTS};
 use blake2::{
-    digest::{self, VariableOutput},
-    Blake2b, Digest, VarBlake2b,
+    digest::{self, Output, VariableOutput},
+    Blake2b512, Blake2bVar, Digest,
 };
 
 #[cfg(feature = "parallel")]
@@ -68,7 +68,7 @@ impl<'a> Instance<'a> {
     pub fn hash(
         context: &Argon2<'_>,
         alg: Algorithm,
-        initial_hash: digest::Output<Blake2b>,
+        initial_hash: Output<Blake2b512>,
         memory: Memory<'a>,
         out: &mut [u8],
     ) -> Result<()> {
@@ -88,7 +88,7 @@ impl<'a> Instance<'a> {
     fn new(
         context: &Argon2<'_>,
         alg: Algorithm,
-        mut initial_hash: digest::Output<Blake2b>,
+        mut initial_hash: Output<Blake2b512>,
         memory: Memory<'a>,
     ) -> Result<Self> {
         let lane_length = memory.segment_length() * SYNC_POINTS;
@@ -416,7 +416,7 @@ fn blake2b_long(inputs: &[&[u8]], mut out: &mut [u8]) -> Result<()> {
     let outlen_bytes = (out.len() as u32).to_le_bytes();
 
     if out.len() <= BLAKE2B_OUTBYTES {
-        let mut digest = VarBlake2b::new(out.len()).unwrap();
+        let mut digest = Blake2bVar::new(out.len()).unwrap();
         digest::Update::update(&mut digest, &outlen_bytes);
 
         for input in inputs {
@@ -425,7 +425,7 @@ fn blake2b_long(inputs: &[&[u8]], mut out: &mut [u8]) -> Result<()> {
 
         digest.finalize_variable(|hash| out.copy_from_slice(hash));
     } else {
-        let mut digest = Blake2b::new();
+        let mut digest = Blake2b512::new();
         digest.update(&outlen_bytes);
 
         for input in inputs {
@@ -442,13 +442,13 @@ fn blake2b_long(inputs: &[&[u8]], mut out: &mut [u8]) -> Result<()> {
 
         while out.len() > BLAKE2B_OUTBYTES {
             in_buffer.copy_from_slice(&out_buffer);
-            out_buffer.copy_from_slice(&Blake2b::digest(&in_buffer));
+            out_buffer.copy_from_slice(&Blake2b512::digest(&in_buffer));
 
             out[..(BLAKE2B_OUTBYTES / 2)].copy_from_slice(&out_buffer[..(BLAKE2B_OUTBYTES / 2)]);
             out = &mut out[(BLAKE2B_OUTBYTES / 2)..];
         }
 
-        let mut digest = VarBlake2b::new(out.len()).unwrap();
+        let mut digest = Blake2bVar::new(out.len()).unwrap();
         digest::Update::update(&mut digest, &out_buffer);
         digest.finalize_variable(|hash| out.copy_from_slice(hash));
     }
